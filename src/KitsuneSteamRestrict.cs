@@ -55,7 +55,7 @@ public class PluginConfig : BasePluginConfig
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.2.0";
+    public override string ModuleVersion => "1.2.1";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
@@ -190,7 +190,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
             (Config.BlockPrivateProfile, 1, userInfo.IsPrivate ? 0 : 1),
             (Config.BlockTradeBanned, 1, userInfo.IsTradeBanned ? 0 : 1),
             (Config.BlockGameBanned, 1, userInfo.IsGameBanned ? 0 : 1),
-            (!string.IsNullOrEmpty(Config.SteamGroupID), 1, userInfo.IsInSteamGroup ? 0 : 1),
+            (!string.IsNullOrEmpty(Config.SteamGroupID), 1, userInfo.IsInSteamGroup ? 1 : 0),
             (Config.BlockVACBanned, 1, userInfo.IsVACBanned ? 0 : 1),
         };
 

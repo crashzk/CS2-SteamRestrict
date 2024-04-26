@@ -1,3 +1,8 @@
+-- 2024. 04. 26 - v1.2.1
+
+- update: Updated from NET7 to NET8
+- fix: Steam group check
+
 -- 2024. 04. 06 - v1.2.0
 
 - feat: Created SteamService model
