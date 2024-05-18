@@ -1,3 +1,8 @@
+-- 2024. 05. 18 - v1.3.0
+
+- feat: Add configuration json file to allow players to bypass specific restrictions
+- feat: Add database to store allowed players for a while and dont validate them all the time
+
 -- 2024. 04. 26 - v1.2.1
 
 - update: Updated from NET7 to NET8

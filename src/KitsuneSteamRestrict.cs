@@ -2,10 +2,10 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Modules.Timers;
+using CounterStrikeSharp.API.Modules.Admin;
 
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using CounterStrikeSharp.API.Modules.Admin;
 
 namespace KitsuneSteamRestrict;
 
@@ -49,13 +49,46 @@ public class PluginConfig : BasePluginConfig
 
     [JsonPropertyName("BlockGameBanned")]
     public bool BlockGameBanned { get; set; } = false;
+
+    [JsonPropertyName("DatabaseSettings")]
+    public DatabaseSettings DatabaseSettings = new DatabaseSettings();
+
+    [JsonPropertyName("ConfigVersion")]
+    public override int Version { get; set; } = 2;
 }
 
-[MinimumApiVersion(198)]
+public sealed class DatabaseSettings
+{
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = "localhost";
+
+    [JsonPropertyName("username")]
+    public string Username { get; set; } = "root";
+
+    [JsonPropertyName("database")]
+    public string Database { get; set; } = "database";
+
+    [JsonPropertyName("password")]
+    public string Password { get; set; } = "password";
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 3306;
+
+    [JsonPropertyName("sslmode")]
+    public string Sslmode { get; set; } = "none";
+
+    [JsonPropertyName("table-prefix")]
+    public string TablePrefix { get; set; } = "";
+
+    [JsonPropertyName("table-purge-days")]
+    public int TablePurgeDays { get; set; } = 30;
+}
+
+[MinimumApiVersion(227)]
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.2.1";
+    public override string ModuleVersion => "1.3.0";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
@@ -64,20 +97,29 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
     private CounterStrikeSharp.API.Modules.Timers.Timer?[] g_hAuthorize = new CounterStrikeSharp.API.Modules.Timers.Timer?[65];
 
+    private BypassConfig? _bypassConfig;
     public PluginConfig Config { get; set; } = new();
 
     public void OnConfigParsed(PluginConfig config)
     {
-        Config = config;
+        if (config.Version < Config.Version)
+            base.Logger.LogWarning("Configuration version mismatch (Expected: {0} | Current: {1})", this.Config.Version, config.Version);
 
         if (string.IsNullOrEmpty(config.SteamWebAPI))
-        {
-            Logger.LogError("This plugin won't work because Web API is empty.");
-        }
+            base.Logger.LogError("This plugin won't work because Web API is empty.");
+
+        Config = config;
     }
 
     public override void Load(bool hotReload)
     {
+        string bypassConfigFilePath = "bypass_config.json";
+        var bypassConfigService = new BypassConfigService(bypassConfigFilePath);
+        _bypassConfig = bypassConfigService.LoadConfig();
+
+        var databaseService = new DatabaseService(Config.DatabaseSettings);
+        _ = databaseService.EnsureTablesExistAsync();
+
         RegisterListener<Listeners.OnGameServerSteamAPIActivated>(() => { g_bSteamAPIActivated = true; });
         RegisterListener<Listeners.OnClientConnect>((int slot, string name, string ipAddress) => { g_hAuthorize[slot]?.Kill(); });
         RegisterListener<Listeners.OnClientDisconnect>((int slot) => { g_hAuthorize[slot]?.Kill(); });
@@ -96,8 +138,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
     public HookResult OnPlayerConnectFull(EventPlayerConnectFull @event, GameEventInfo info)
     {
-        CCSPlayerController player = @event.Userid;
-
+        CCSPlayerController? player = @event.Userid;
         if (player == null)
             return HookResult.Continue;
 
@@ -131,10 +172,21 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         if (!g_bSteamAPIActivated)
             return;
 
-        nint handle = player.Handle;
         ulong authorizedSteamID = player.AuthorizedSteamID.SteamId64;
+        nint handle = player.Handle;
 
-        _ = CheckUserViolations(handle, authorizedSteamID);
+        var databaseService = new DatabaseService(Config.DatabaseSettings);
+
+        Task.Run(async () =>
+        {
+            if (await databaseService.IsSteamIdAllowedAsync(authorizedSteamID))
+            {
+                Server.NextWorldUpdate(() => Logger.LogInformation($"{player.PlayerName} ({authorizedSteamID}) was allowed to join without validations because they were found in the database."));
+                return;
+            }
+
+            await CheckUserViolations(handle, authorizedSteamID);
+        });
     }
 
     private async Task CheckUserViolations(nint handle, ulong authorizedSteamID)
@@ -168,6 +220,16 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                 {
                     Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
                 }
+                else
+                {
+                    ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
+
+                    if (steamID != 0)
+                    {
+                        var databaseService = new DatabaseService(Config.DatabaseSettings);
+                        Task.Run(async () => await databaseService.AddAllowedUserAsync(steamID, Config.DatabaseSettings.TablePurgeDays));
+                    }
+                }
             }
         });
     }
@@ -177,21 +239,23 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         if (AdminManager.PlayerHasPermissions(player, "@css/bypasspremiumcheck"))
             return false;
 
+        BypassConfig bypassConfig = _bypassConfig ?? new BypassConfig();
+
         bool isPrime = userInfo.HasPrime;
         var configChecks = new[]
         {
-            (isPrime, Config.MinimumHourPrime, userInfo.CS2Playtime),
-            (isPrime, Config.MinimumLevelPrime, userInfo.SteamLevel),
-            (isPrime, Config.MinimumCS2LevelPrime, userInfo.CS2Level),
-            (!isPrime, Config.MinimumHourNonPrime, userInfo.CS2Playtime),
-            (!isPrime, Config.MinimumLevelNonPrime, userInfo.SteamLevel),
-            (!isPrime, Config.MinimumCS2LevelNonPrime, userInfo.CS2Level),
-            (true, Config.MinimumSteamAccountAgeInDays, (DateTime.Now - userInfo.SteamAccountAge).TotalDays),
-            (Config.BlockPrivateProfile, 1, userInfo.IsPrivate ? 0 : 1),
-            (Config.BlockTradeBanned, 1, userInfo.IsTradeBanned ? 0 : 1),
-            (Config.BlockGameBanned, 1, userInfo.IsGameBanned ? 0 : 1),
-            (!string.IsNullOrEmpty(Config.SteamGroupID), 1, userInfo.IsInSteamGroup ? 1 : 0),
-            (Config.BlockVACBanned, 1, userInfo.IsVACBanned ? 0 : 1),
+            (isPrime && !bypassConfig.BypassMinimumCS2Level, Config.MinimumCS2LevelPrime, userInfo.CS2Level),
+            (!isPrime && !bypassConfig.BypassMinimumCS2Level, Config.MinimumCS2LevelNonPrime, userInfo.CS2Level),
+            (isPrime && !bypassConfig.BypassMinimumHours, Config.MinimumHourPrime, userInfo.CS2Playtime),
+            (!isPrime && !bypassConfig.BypassMinimumHours, Config.MinimumHourNonPrime, userInfo.CS2Playtime),
+            (isPrime && !bypassConfig.BypassMinimumLevel, Config.MinimumLevelPrime, userInfo.SteamLevel),
+            (!isPrime && !bypassConfig.BypassMinimumLevel, Config.MinimumLevelNonPrime, userInfo.SteamLevel),
+            (!bypassConfig.BypassMinimumSteamAccountAge, Config.MinimumSteamAccountAgeInDays, (DateTime.Now - userInfo.SteamAccountAge).TotalDays),
+            (Config.BlockPrivateProfile && !bypassConfig.BypassPrivateProfile, 1, userInfo.IsPrivate ? 0 : 1),
+            (Config.BlockTradeBanned && !bypassConfig.BypassTradeBanned, 1, userInfo.IsTradeBanned ? 0 : 1),
+            (Config.BlockGameBanned && !bypassConfig.BypassGameBanned, 1, userInfo.IsGameBanned ? 0 : 1),
+            (!string.IsNullOrEmpty(Config.SteamGroupID) && !bypassConfig.BypassSteamGroupCheck, 1, userInfo.IsInSteamGroup ? 1 : 0),
+            (Config.BlockVACBanned && !bypassConfig.BypassVACBanned, 1, userInfo.IsVACBanned ? 0 : 1),
         };
 
         return configChecks.Any(check => check.Item1 && check.Item2 != -1 && check.Item3 < check.Item2);
