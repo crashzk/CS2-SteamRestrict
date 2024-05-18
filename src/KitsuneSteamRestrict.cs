@@ -240,22 +240,23 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
             return false;
 
         BypassConfig bypassConfig = _bypassConfig ?? new BypassConfig();
+        PlayerBypassConfig? playerBypassConfig = bypassConfig.GetPlayerConfig(player.AuthorizedSteamID?.SteamId64 ?? 0);
 
         bool isPrime = userInfo.HasPrime;
         var configChecks = new[]
         {
-            (isPrime && !bypassConfig.BypassMinimumCS2Level, Config.MinimumCS2LevelPrime, userInfo.CS2Level),
-            (!isPrime && !bypassConfig.BypassMinimumCS2Level, Config.MinimumCS2LevelNonPrime, userInfo.CS2Level),
-            (isPrime && !bypassConfig.BypassMinimumHours, Config.MinimumHourPrime, userInfo.CS2Playtime),
-            (!isPrime && !bypassConfig.BypassMinimumHours, Config.MinimumHourNonPrime, userInfo.CS2Playtime),
-            (isPrime && !bypassConfig.BypassMinimumLevel, Config.MinimumLevelPrime, userInfo.SteamLevel),
-            (!isPrime && !bypassConfig.BypassMinimumLevel, Config.MinimumLevelNonPrime, userInfo.SteamLevel),
-            (!bypassConfig.BypassMinimumSteamAccountAge, Config.MinimumSteamAccountAgeInDays, (DateTime.Now - userInfo.SteamAccountAge).TotalDays),
-            (Config.BlockPrivateProfile && !bypassConfig.BypassPrivateProfile, 1, userInfo.IsPrivate ? 0 : 1),
-            (Config.BlockTradeBanned && !bypassConfig.BypassTradeBanned, 1, userInfo.IsTradeBanned ? 0 : 1),
-            (Config.BlockGameBanned && !bypassConfig.BypassGameBanned, 1, userInfo.IsGameBanned ? 0 : 1),
-            (!string.IsNullOrEmpty(Config.SteamGroupID) && !bypassConfig.BypassSteamGroupCheck, 1, userInfo.IsInSteamGroup ? 1 : 0),
-            (Config.BlockVACBanned && !bypassConfig.BypassVACBanned, 1, userInfo.IsVACBanned ? 0 : 1),
+            (isPrime && (playerBypassConfig?.BypassMinimumCS2Level ?? false), Config.MinimumCS2LevelPrime, userInfo.CS2Level),
+            (!isPrime && (playerBypassConfig?.BypassMinimumCS2Level ?? false), Config.MinimumCS2LevelNonPrime, userInfo.CS2Level),
+            (isPrime && (playerBypassConfig?.BypassMinimumHours ?? false), Config.MinimumHourPrime, userInfo.CS2Playtime),
+            (!isPrime && (playerBypassConfig?.BypassMinimumHours ?? false), Config.MinimumHourNonPrime, userInfo.CS2Playtime),
+            (isPrime && (playerBypassConfig?.BypassMinimumLevel ?? false), Config.MinimumLevelPrime, userInfo.SteamLevel),
+            (!isPrime && (playerBypassConfig?.BypassMinimumLevel ?? false), Config.MinimumLevelNonPrime, userInfo.SteamLevel),
+            (playerBypassConfig?.BypassMinimumSteamAccountAge ?? false, Config.MinimumSteamAccountAgeInDays, (DateTime.Now - userInfo.SteamAccountAge).TotalDays),
+            (Config.BlockPrivateProfile && (playerBypassConfig?.BypassPrivateProfile ?? false), 1, userInfo.IsPrivate ? 0 : 1),
+            (Config.BlockTradeBanned && (playerBypassConfig?.BypassTradeBanned ?? false), 1, userInfo.IsTradeBanned ? 0 : 1),
+            (Config.BlockGameBanned && (playerBypassConfig?.BypassGameBanned ?? false), 1, userInfo.IsGameBanned ? 0 : 1),
+            (!string.IsNullOrEmpty(Config.SteamGroupID) && (playerBypassConfig?.BypassSteamGroupCheck ?? false), 1, userInfo.IsInSteamGroup ? 1 : 0),
+            (Config.BlockVACBanned && (playerBypassConfig?.BypassVACBanned ?? false), 1, userInfo.IsVACBanned ? 0 : 1),
         };
 
         return configChecks.Any(check => check.Item1 && check.Item2 != -1 && check.Item3 < check.Item2);

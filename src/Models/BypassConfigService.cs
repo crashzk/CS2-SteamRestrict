@@ -2,9 +2,8 @@ using System.Text.Json;
 
 namespace KitsuneSteamRestrict
 {
-	public class BypassConfig
+	public class PlayerBypassConfig
 	{
-		public ulong SteamID { get; set; }
 		public bool BypassMinimumCS2Level { get; set; } = false;
 		public bool BypassMinimumHours { get; set; } = false;
 		public bool BypassMinimumLevel { get; set; } = false;
@@ -14,6 +13,29 @@ namespace KitsuneSteamRestrict
 		public bool BypassVACBanned { get; set; } = false;
 		public bool BypassSteamGroupCheck { get; set; } = false;
 		public bool BypassGameBanned { get; set; } = false;
+	}
+
+	public class BypassConfig
+	{
+		private Dictionary<ulong, PlayerBypassConfig> _playerConfigs = new Dictionary<ulong, PlayerBypassConfig>();
+
+		public PlayerBypassConfig? GetPlayerConfig(ulong steamID)
+		{
+			if (_playerConfigs.TryGetValue(steamID, out var playerConfig))
+				return playerConfig;
+
+			return null;
+		}
+
+		public void AddPlayerConfig(ulong steamID, PlayerBypassConfig playerConfig)
+		{
+			_playerConfigs[steamID] = playerConfig;
+		}
+
+		public Dictionary<ulong, PlayerBypassConfig> GetAllPlayerConfigs()
+		{
+			return _playerConfigs;
+		}
 	}
 
 	public class BypassConfigService
@@ -30,13 +52,22 @@ namespace KitsuneSteamRestrict
 			if (File.Exists(_configFilePath))
 			{
 				string json = File.ReadAllText(_configFilePath);
-				return JsonSerializer.Deserialize<BypassConfig>(json)!;
+				var playerConfigs = JsonSerializer.Deserialize<Dictionary<ulong, PlayerBypassConfig>>(json)!;
+				var bypassConfig = new BypassConfig();
+
+				foreach (var kvp in playerConfigs)
+				{
+					bypassConfig.AddPlayerConfig(kvp.Key, kvp.Value);
+				}
+
+				return bypassConfig;
 			}
 			else
 			{
-				BypassConfig defaultConfig = new BypassConfig
+				var defaultConfig = new BypassConfig();
+
+				defaultConfig.AddPlayerConfig(76561198345583467, new PlayerBypassConfig
 				{
-					SteamID = 76561198345583467,
 					BypassMinimumCS2Level = true,
 					BypassMinimumHours = false,
 					BypassMinimumLevel = true,
@@ -46,9 +77,22 @@ namespace KitsuneSteamRestrict
 					BypassVACBanned = true,
 					BypassSteamGroupCheck = false,
 					BypassGameBanned = true
-				};
+				});
 
-				string json = JsonSerializer.Serialize(defaultConfig, new JsonSerializerOptions { WriteIndented = true });
+				defaultConfig.AddPlayerConfig(76561198132924835, new PlayerBypassConfig
+				{
+					BypassMinimumCS2Level = false,
+					BypassMinimumHours = true,
+					BypassMinimumLevel = false,
+					BypassMinimumSteamAccountAge = true,
+					BypassPrivateProfile = false,
+					BypassTradeBanned = true,
+					BypassVACBanned = false,
+					BypassSteamGroupCheck = true,
+					BypassGameBanned = false
+				});
+
+				string json = JsonSerializer.Serialize(defaultConfig.GetAllPlayerConfigs(), new JsonSerializerOptions { WriteIndented = true });
 				File.WriteAllText(_configFilePath, json);
 
 				return defaultConfig;
