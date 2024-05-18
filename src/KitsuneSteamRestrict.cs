@@ -114,7 +114,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
     public override void Load(bool hotReload)
     {
         string bypassConfigFilePath = "bypass_config.json";
-        var bypassConfigService = new BypassConfigService(bypassConfigFilePath);
+        var bypassConfigService = new BypassConfigService(Path.Combine(ModuleDirectory, bypassConfigFilePath));
         _bypassConfig = bypassConfigService.LoadConfig();
 
         var databaseService = new DatabaseService(Config.DatabaseSettings);
