@@ -51,7 +51,7 @@ public class PluginConfig : BasePluginConfig
     public bool BlockGameBanned { get; set; } = false;
 
     [JsonPropertyName("DatabaseSettings")]
-    public DatabaseSettings DatabaseSettings = new DatabaseSettings();
+    public DatabaseSettings DatabaseSettings { get; set; } = new DatabaseSettings();
 
     [JsonPropertyName("ConfigVersion")]
     public override int Version { get; set; } = 2;
