@@ -189,53 +189,53 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                 }
             }
 
-            await CheckUserViolations(handle, authorizedSteamID);
+            Server.NextWorldUpdate(() =>
+            {
+                CheckUserViolations(handle, authorizedSteamID);
+            });
         });
     }
 
-    private async Task CheckUserViolations(nint handle, ulong authorizedSteamID)
+    private void CheckUserViolations(nint handle, ulong authorizedSteamID)
     {
         SteamService steamService = new SteamService(this);
-        await steamService.FetchSteamUserInfo(handle, authorizedSteamID);
+        steamService.FetchSteamUserInfo(handle, authorizedSteamID);
 
         SteamUserInfo? userInfo = steamService.UserInfo;
 
-        Server.NextWorldUpdate(() =>
+        CCSPlayerController? player = Utilities.GetPlayerFromSteamId(authorizedSteamID);
+
+        if (player?.IsValid == true && userInfo != null)
         {
-            CCSPlayerController? player = Utilities.GetPlayerFromSteamId(authorizedSteamID);
+            Logger.LogInformation($"{player.PlayerName} info:");
+            Logger.LogInformation($"CS2Playtime: {userInfo.CS2Playtime}");
+            Logger.LogInformation($"CS2Level: {userInfo.CS2Level}");
+            Logger.LogInformation($"SteamLevel: {userInfo.SteamLevel}");
+            if ((DateTime.Now - userInfo.SteamAccountAge).TotalSeconds > 30)
+                Logger.LogInformation($"Steam Account Creation Date: {userInfo.SteamAccountAge:dd-MM-yyyy}");
+            else
+                Logger.LogInformation($"Steam Account Creation Date: N/A");
+            Logger.LogInformation($"HasPrime: {userInfo.HasPrime}");
+            Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
+            Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
+            Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
+            Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
 
-            if (player?.IsValid == true && userInfo != null)
+            if (IsRestrictionViolated(player, userInfo))
             {
-                Logger.LogInformation($"{player.PlayerName} info:");
-                Logger.LogInformation($"CS2Playtime: {userInfo.CS2Playtime}");
-                Logger.LogInformation($"CS2Level: {userInfo.CS2Level}");
-                Logger.LogInformation($"SteamLevel: {userInfo.SteamLevel}");
-                if ((DateTime.Now - userInfo.SteamAccountAge).TotalSeconds > 30)
-                    Logger.LogInformation($"Steam Account Creation Date: {userInfo.SteamAccountAge:dd-MM-yyyy}");
-                else
-                    Logger.LogInformation($"Steam Account Creation Date: N/A");
-                Logger.LogInformation($"HasPrime: {userInfo.HasPrime}");
-                Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
-                Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
-                Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
-                Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
+                Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
+            }
+            else if (!IsDatabaseConfigDefault())
+            {
+                ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
 
-                if (IsRestrictionViolated(player, userInfo))
+                if (steamID != 0)
                 {
-                    Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
-                }
-                else if (!IsDatabaseConfigDefault())
-                {
-                    ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
-
-                    if (steamID != 0)
-                    {
-                        var databaseService = new DatabaseService(Config.DatabaseSettings);
-                        Task.Run(async () => await databaseService.AddAllowedUserAsync(steamID, Config.DatabaseSettings.TablePurgeDays));
-                    }
+                    var databaseService = new DatabaseService(Config.DatabaseSettings);
+                    Task.Run(async () => await databaseService.AddAllowedUserAsync(steamID, Config.DatabaseSettings.TablePurgeDays));
                 }
             }
-        });
+        }
     }
 
     private bool IsRestrictionViolated(CCSPlayerController player, SteamUserInfo userInfo)

@@ -36,30 +36,28 @@ public class SteamService
 		_steamWebAPIKey = _config.SteamWebAPI;
 	}
 
-	public async Task FetchSteamUserInfo(nint handle, ulong authorizedSteamID)
+	public void FetchSteamUserInfo(nint handle, ulong authorizedSteamID)
 	{
-		await Server.NextWorldUpdateAsync(() =>
+		CSteamID cSteamID = new CSteamID(authorizedSteamID);
+
+		UserInfo = new SteamUserInfo
 		{
-			string steamId = authorizedSteamID.ToString();
-			CSteamID cSteamID = new CSteamID(authorizedSteamID);
+			HasPrime = SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)624820) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense
+					|| SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)54029) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense,
+			CS2Level = new CCSPlayerController_InventoryServices(handle).PersonaDataPublicLevel
+		};
 
-			UserInfo = new SteamUserInfo
-			{
-				HasPrime = SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)624820) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense
-						|| SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)54029) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense,
-				CS2Level = new CCSPlayerController_InventoryServices(handle).PersonaDataPublicLevel
-			};
+		Task.Run(async () => await FetchSteamUserInfo(authorizedSteamID.ToString())).Wait();
+	}
 
-			Task.Run(async () =>
-			{
-				UserInfo.CS2Playtime = await FetchCS2PlaytimeAsync(steamId) / 60;
-				UserInfo.SteamLevel = await FetchSteamLevelAsync(steamId);
-				await FetchProfilePrivacyAsync(steamId, UserInfo);
-				await FetchTradeBanStatusAsync(steamId, UserInfo);
-				await FetchGameBanStatusAsync(steamId, UserInfo);
-				await FetchSteamGroupMembershipAsync(steamId, UserInfo);
-			});
-		});
+	public async Task FetchSteamUserInfo(string steamId)
+	{
+		UserInfo!.CS2Playtime = await FetchCS2PlaytimeAsync(steamId) / 60;
+		UserInfo.SteamLevel = await FetchSteamLevelAsync(steamId);
+		await FetchProfilePrivacyAsync(steamId, UserInfo);
+		await FetchTradeBanStatusAsync(steamId, UserInfo);
+		await FetchGameBanStatusAsync(steamId, UserInfo);
+		await FetchSteamGroupMembershipAsync(steamId, UserInfo);
 	}
 
 	private async Task<int> FetchCS2PlaytimeAsync(string steamId)
