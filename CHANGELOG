@@ -1,3 +1,8 @@
+-- 2024. 05. 19 - v1.3.1
+
+- feat: Added detection to know if database is used
+- fix: Threading issues with database
+
 -- 2024. 05. 18 - v1.3.0
 
 - feat: Add configuration json file to allow players to bypass specific restrictions

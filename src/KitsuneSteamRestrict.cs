@@ -88,7 +88,7 @@ public sealed class DatabaseSettings
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.3.0";
+    public override string ModuleVersion => "1.3.1";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
@@ -117,8 +117,11 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         var bypassConfigService = new BypassConfigService(Path.Combine(ModuleDirectory, bypassConfigFilePath));
         _bypassConfig = bypassConfigService.LoadConfig();
 
-        var databaseService = new DatabaseService(Config.DatabaseSettings);
-        _ = databaseService.EnsureTablesExistAsync();
+        if (!IsDatabaseConfigDefault())
+        {
+            var databaseService = new DatabaseService(Config.DatabaseSettings);
+            _ = databaseService.EnsureTablesExistAsync();
+        }
 
         RegisterListener<Listeners.OnGameServerSteamAPIActivated>(() => { g_bSteamAPIActivated = true; });
         RegisterListener<Listeners.OnClientConnect>((int slot, string name, string ipAddress) => { g_hAuthorize[slot]?.Kill(); });
@@ -143,7 +146,6 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
             return HookResult.Continue;
 
         OnPlayerConnectFull(player);
-
         return HookResult.Continue;
     }
 
@@ -175,14 +177,16 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         ulong authorizedSteamID = player.AuthorizedSteamID.SteamId64;
         nint handle = player.Handle;
 
-        var databaseService = new DatabaseService(Config.DatabaseSettings);
-
         Task.Run(async () =>
         {
-            if (await databaseService.IsSteamIdAllowedAsync(authorizedSteamID))
+            if (!IsDatabaseConfigDefault())
             {
-                Server.NextWorldUpdate(() => Logger.LogInformation($"{player.PlayerName} ({authorizedSteamID}) was allowed to join without validations because they were found in the database."));
-                return;
+                var databaseService = new DatabaseService(Config.DatabaseSettings);
+                if (await databaseService.IsSteamIdAllowedAsync(authorizedSteamID))
+                {
+                    Server.NextWorldUpdate(() => Logger.LogInformation($"{player.PlayerName} ({authorizedSteamID}) was allowed to join without validations because they were found in the database."));
+                    return;
+                }
             }
 
             await CheckUserViolations(handle, authorizedSteamID);
@@ -192,7 +196,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
     private async Task CheckUserViolations(nint handle, ulong authorizedSteamID)
     {
         SteamService steamService = new SteamService(this);
-        await steamService.FetchSteamUserInfoAsync(handle, authorizedSteamID);
+        await steamService.FetchSteamUserInfo(handle, authorizedSteamID);
 
         SteamUserInfo? userInfo = steamService.UserInfo;
 
@@ -220,7 +224,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                 {
                     Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
                 }
-                else
+                else if (!IsDatabaseConfigDefault())
                 {
                     ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
 
@@ -260,5 +264,18 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         };
 
         return configChecks.Any(check => check.Item1 && check.Item2 != -1 && check.Item3 < check.Item2);
+    }
+
+    public bool IsDatabaseConfigDefault()
+    {
+        DatabaseSettings settings = Config.DatabaseSettings;
+        return settings.Host == "localhost" &&
+            settings.Username == "root" &&
+            settings.Database == "database" &&
+            settings.Password == "password" &&
+            settings.Port == 3306 &&
+            settings.Sslmode == "none" &&
+            settings.TablePrefix == "" &&
+            settings.TablePurgeDays == 30;
     }
 }
