@@ -28,26 +28,13 @@ public class SteamService
 	private readonly ILogger _logger;
 	public SteamUserInfo? UserInfo = null;
 
-	public SteamService(SteamRestrictPlugin plugin)
+	public SteamService(SteamRestrictPlugin plugin, SteamUserInfo userInfo)
 	{
 		_httpClient = plugin.Client;
 		_config = plugin.Config;
 		_logger = plugin.Logger;
 		_steamWebAPIKey = _config.SteamWebAPI;
-	}
-
-	public void FetchSteamUserInfo(nint handle, ulong authorizedSteamID)
-	{
-		CSteamID cSteamID = new CSteamID(authorizedSteamID);
-
-		UserInfo = new SteamUserInfo
-		{
-			HasPrime = SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)624820) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense
-					|| SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)54029) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense,
-			CS2Level = new CCSPlayerController_InventoryServices(handle).PersonaDataPublicLevel
-		};
-
-		Task.Run(async () => await FetchSteamUserInfo(authorizedSteamID.ToString())).Wait();
+		UserInfo = userInfo;
 	}
 
 	public async Task FetchSteamUserInfo(string steamId)

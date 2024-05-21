@@ -6,11 +6,16 @@ using CounterStrikeSharp.API.Modules.Admin;
 
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Steamworks;
+using CounterStrikeSharp.API.Modules.Cvars;
 
 namespace KitsuneSteamRestrict;
 
 public class PluginConfig : BasePluginConfig
 {
+    [JsonPropertyName("LogProfileInformations")]
+    public bool LogProfileInformations { get; set; } = true;
+
     [JsonPropertyName("SteamWebAPI")]
     public string SteamWebAPI { get; set; } = "";
 
@@ -54,7 +59,7 @@ public class PluginConfig : BasePluginConfig
     public DatabaseSettings DatabaseSettings { get; set; } = new DatabaseSettings();
 
     [JsonPropertyName("ConfigVersion")]
-    public override int Version { get; set; } = 2;
+    public override int Version { get; set; } = 3;
 }
 
 public sealed class DatabaseSettings
@@ -88,7 +93,7 @@ public sealed class DatabaseSettings
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.3.1";
+    public override string ModuleVersion => "1.3.2";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
@@ -120,7 +125,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         if (!IsDatabaseConfigDefault())
         {
             var databaseService = new DatabaseService(Config.DatabaseSettings);
-            _ = databaseService.EnsureTablesExistAsync();
+            Task.Run(databaseService.EnsureTablesExistAsync);
         }
 
         RegisterListener<Listeners.OnGameServerSteamAPIActivated>(() => { g_bSteamAPIActivated = true; });
@@ -198,44 +203,63 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
     private void CheckUserViolations(nint handle, ulong authorizedSteamID)
     {
-        SteamService steamService = new SteamService(this);
-        steamService.FetchSteamUserInfo(handle, authorizedSteamID);
+        CSteamID cSteamID = new CSteamID(authorizedSteamID);
 
-        SteamUserInfo? userInfo = steamService.UserInfo;
-
-        CCSPlayerController? player = Utilities.GetPlayerFromSteamId(authorizedSteamID);
-
-        if (player?.IsValid == true && userInfo != null)
+        SteamUserInfo UserInfo = new SteamUserInfo
         {
-            Logger.LogInformation($"{player.PlayerName} info:");
-            Logger.LogInformation($"CS2Playtime: {userInfo.CS2Playtime}");
-            Logger.LogInformation($"CS2Level: {userInfo.CS2Level}");
-            Logger.LogInformation($"SteamLevel: {userInfo.SteamLevel}");
-            if ((DateTime.Now - userInfo.SteamAccountAge).TotalSeconds > 30)
-                Logger.LogInformation($"Steam Account Creation Date: {userInfo.SteamAccountAge:dd-MM-yyyy}");
-            else
-                Logger.LogInformation($"Steam Account Creation Date: N/A");
-            Logger.LogInformation($"HasPrime: {userInfo.HasPrime}");
-            Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
-            Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
-            Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
-            Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
+            HasPrime = SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)624820) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense
+                    || SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)54029) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense,
+            CS2Level = new CCSPlayerController_InventoryServices(handle).PersonaDataPublicLevel
+        };
 
-            if (IsRestrictionViolated(player, userInfo))
-            {
-                Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
-            }
-            else if (!IsDatabaseConfigDefault())
-            {
-                ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
+        SteamService steamService = new SteamService(this, UserInfo);
 
-                if (steamID != 0)
+        Task.Run(async () =>
+        {
+            await steamService.FetchSteamUserInfo(authorizedSteamID.ToString());
+
+            SteamUserInfo? userInfo = steamService.UserInfo;
+
+            Server.NextWorldUpdate(() =>
+            {
+                CCSPlayerController? player = Utilities.GetPlayerFromSteamId(authorizedSteamID);
+
+                if (player?.IsValid == true && userInfo != null)
                 {
-                    var databaseService = new DatabaseService(Config.DatabaseSettings);
-                    Task.Run(async () => await databaseService.AddAllowedUserAsync(steamID, Config.DatabaseSettings.TablePurgeDays));
+                    if (Config.LogProfileInformations)
+                    {
+                        Logger.LogInformation($"{player.PlayerName} info:");
+                        Logger.LogInformation($"CS2Playtime: {userInfo.CS2Playtime}");
+                        Logger.LogInformation($"CS2Level: {userInfo.CS2Level}");
+                        Logger.LogInformation($"SteamLevel: {userInfo.SteamLevel}");
+                        if ((DateTime.Now - userInfo.SteamAccountAge).TotalSeconds > 30)
+                            Logger.LogInformation($"Steam Account Creation Date: {userInfo.SteamAccountAge:dd-MM-yyyy} ({(int)(DateTime.Now - userInfo.SteamAccountAge).TotalDays} days ago)");
+                        else
+                            Logger.LogInformation($"Steam Account Creation Date: N/A");
+                        Logger.LogInformation($"HasPrime: {userInfo.HasPrime}");
+                        Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
+                        Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
+                        Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
+                        Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
+                    }
+
+                    if (IsRestrictionViolated(player, userInfo))
+                    {
+                        Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
+                    }
+                    else if (!IsDatabaseConfigDefault())
+                    {
+                        ulong steamID = player.AuthorizedSteamID?.SteamId64 ?? 0;
+
+                        if (steamID != 0)
+                        {
+                            var databaseService = new DatabaseService(Config.DatabaseSettings);
+                            Task.Run(async () => await databaseService.AddAllowedUserAsync(steamID, Config.DatabaseSettings.TablePurgeDays));
+                        }
+                    }
                 }
-            }
-        }
+            });
+        });
     }
 
     private bool IsRestrictionViolated(CCSPlayerController player, SteamUserInfo userInfo)
@@ -245,25 +269,50 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
         BypassConfig bypassConfig = _bypassConfig ?? new BypassConfig();
         PlayerBypassConfig? playerBypassConfig = bypassConfig.GetPlayerConfig(player.AuthorizedSteamID?.SteamId64 ?? 0);
-
         bool isPrime = userInfo.HasPrime;
-        var configChecks = new[]
-        {
-            (isPrime && (playerBypassConfig?.BypassMinimumCS2Level ?? false), Config.MinimumCS2LevelPrime, userInfo.CS2Level),
-            (!isPrime && (playerBypassConfig?.BypassMinimumCS2Level ?? false), Config.MinimumCS2LevelNonPrime, userInfo.CS2Level),
-            (isPrime && (playerBypassConfig?.BypassMinimumHours ?? false), Config.MinimumHourPrime, userInfo.CS2Playtime),
-            (!isPrime && (playerBypassConfig?.BypassMinimumHours ?? false), Config.MinimumHourNonPrime, userInfo.CS2Playtime),
-            (isPrime && (playerBypassConfig?.BypassMinimumLevel ?? false), Config.MinimumLevelPrime, userInfo.SteamLevel),
-            (!isPrime && (playerBypassConfig?.BypassMinimumLevel ?? false), Config.MinimumLevelNonPrime, userInfo.SteamLevel),
-            (playerBypassConfig?.BypassMinimumSteamAccountAge ?? false, Config.MinimumSteamAccountAgeInDays, (DateTime.Now - userInfo.SteamAccountAge).TotalDays),
-            (Config.BlockPrivateProfile && (playerBypassConfig?.BypassPrivateProfile ?? false), 1, userInfo.IsPrivate ? 0 : 1),
-            (Config.BlockTradeBanned && (playerBypassConfig?.BypassTradeBanned ?? false), 1, userInfo.IsTradeBanned ? 0 : 1),
-            (Config.BlockGameBanned && (playerBypassConfig?.BypassGameBanned ?? false), 1, userInfo.IsGameBanned ? 0 : 1),
-            (!string.IsNullOrEmpty(Config.SteamGroupID) && (playerBypassConfig?.BypassSteamGroupCheck ?? false), 1, userInfo.IsInSteamGroup ? 1 : 0),
-            (Config.BlockVACBanned && (playerBypassConfig?.BypassVACBanned ?? false), 1, userInfo.IsVACBanned ? 0 : 1),
-        };
 
-        return configChecks.Any(check => check.Item1 && check.Item2 != -1 && check.Item3 < check.Item2);
+        if (isPrime)
+        {
+            if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2LevelPrime != -1 && userInfo.CS2Level < Config.MinimumCS2LevelPrime)
+                return true;
+
+            if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHourPrime != -1 && userInfo.CS2Playtime < Config.MinimumHourPrime)
+                return true;
+
+            if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevelPrime != -1 && userInfo.SteamLevel < Config.MinimumLevelPrime)
+                return true;
+        }
+        else
+        {
+            if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2LevelNonPrime != -1 && userInfo.CS2Level < Config.MinimumCS2LevelNonPrime)
+                return true;
+
+            if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHourNonPrime != -1 && userInfo.CS2Playtime < Config.MinimumHourNonPrime)
+                return true;
+
+            if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevelNonPrime != -1 && userInfo.SteamLevel < Config.MinimumLevelNonPrime)
+                return true;
+        }
+
+        if (!(playerBypassConfig?.BypassMinimumSteamAccountAge ?? false) && Config.MinimumSteamAccountAgeInDays != -1 && (DateTime.Now - userInfo.SteamAccountAge).TotalDays < Config.MinimumSteamAccountAgeInDays)
+            return true;
+
+        if (Config.BlockPrivateProfile && !(playerBypassConfig?.BypassPrivateProfile ?? false) && userInfo.IsPrivate)
+            return true;
+
+        if (Config.BlockTradeBanned && !(playerBypassConfig?.BypassTradeBanned ?? false) && userInfo.IsTradeBanned)
+            return true;
+
+        if (Config.BlockGameBanned && !(playerBypassConfig?.BypassGameBanned ?? false) && userInfo.IsGameBanned)
+            return true;
+
+        if (!string.IsNullOrEmpty(Config.SteamGroupID) && !(playerBypassConfig?.BypassSteamGroupCheck ?? false) && !userInfo.IsInSteamGroup)
+            return true;
+
+        if (Config.BlockVACBanned && !(playerBypassConfig?.BypassVACBanned ?? false) && userInfo.IsVACBanned)
+            return true;
+
+        return false;
     }
 
     public bool IsDatabaseConfigDefault()

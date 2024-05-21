@@ -1,3 +1,10 @@
+-- 2024. 05. 21 - v1.3.2
+
+- feat: Added option to disable join logs
+- feat: Added the user's account oldness in days too
+- fix: Lag spikes caused by database
+- refactor: Violation check function readability improved
+
 -- 2024. 05. 19 - v1.3.1
 
 - feat: Added detection to know if database is used
