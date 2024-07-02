@@ -49,7 +49,10 @@ public class PluginConfig : BasePluginConfig
     public bool BlockGameBanned { get; set; } = false;
 
     [JsonPropertyName("PrivateProfileWarningTime")]
-    public int PrivateProfileWarningTime { get; set; } = 5;
+    public int PrivateProfileWarningTime { get; set; } = 20;
+
+    [JsonPropertyName("PrivateProfileWarningPrintSeconds")]
+    public int PrivateProfileWarningPrintSeconds { get; set; } = 3;
 
     [JsonPropertyName("DatabaseSettings")]
     public DatabaseSettings DatabaseSettings { get; set; } = new DatabaseSettings();
@@ -89,7 +92,7 @@ public sealed class DatabaseSettings
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.4.0";
+    public override string ModuleVersion => "1.4.1";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
@@ -231,6 +234,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                             Logger.LogInformation($"Steam Account Creation Date: N/A");
                         //Logger.LogInformation($"HasPrime: {userInfo.HasPrime}"); Removed due to people bought prime after CS2 cannot be detected sadly (or atleast not yet)
                         Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
+                        Logger.LogInformation($"HasPrivateGameDetails: {userInfo.IsGameDetailsPrivate}");
                         Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
                         Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
                         Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
@@ -238,28 +242,30 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
                     if (IsRestrictionViolated(player, userInfo))
                     {
-                        if (Config.PrivateProfileWarningTime > 0 && userInfo.IsPrivate)
+                        if (Config.PrivateProfileWarningTime > 0 && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
                         {
                             g_iWarnTime[player.Slot] = Config.PrivateProfileWarningTime;
                             int playerSlot = player.Slot;
 
-                            g_hTimer[playerSlot] = AddTimer(1, () =>
+                            AddTimer(Config.PrivateProfileWarningTime, () =>
+                            {
+                                if (player?.IsValid == true)
+                                    Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
+                            });
+
+                            g_hTimer[playerSlot] = AddTimer(Config.PrivateProfileWarningPrintSeconds, () =>
                             {
                                 if (player?.IsValid == true)
                                 {
                                     player.PrintToChat($" {ChatColors.Silver}[ {ChatColors.Lime}SteamRestrict {ChatColors.Silver}] {ChatColors.LightRed}Your Steam profile or Game details are private. You will be kicked in {g_iWarnTime[playerSlot]} seconds.");
                                 }
-
-                                g_iWarnTime[playerSlot]--;
-
-                                if (g_iWarnTime[playerSlot] <= 0)
+                                else
                                 {
-                                    if (player?.IsValid == true)
-                                        Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
-
                                     g_hTimer[playerSlot]?.Kill();
                                     g_hTimer[playerSlot] = null;
                                 }
+
+                                g_iWarnTime[playerSlot] -= Config.PrivateProfileWarningPrintSeconds;
                             }, TimerFlags.REPEAT);
                         }
                         else
@@ -300,7 +306,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         if (!(playerBypassConfig?.BypassMinimumSteamAccountAge ?? false) && Config.MinimumSteamAccountAgeInDays != -1 && (DateTime.Now - userInfo.SteamAccountAge).TotalDays < Config.MinimumSteamAccountAgeInDays)
             return true;
 
-        if (Config.BlockPrivateProfile && !(playerBypassConfig?.BypassPrivateProfile ?? false) && userInfo.IsPrivate)
+        if (Config.BlockPrivateProfile && !(playerBypassConfig?.BypassPrivateProfile ?? false) && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
             return true;
 
         if (Config.BlockTradeBanned && !(playerBypassConfig?.BypassTradeBanned ?? false) && userInfo.IsTradeBanned)

@@ -10,6 +10,7 @@ public class SteamUserInfo
 	public int CS2Level { get; set; }
 	public int CS2Playtime { get; set; }
 	public bool IsPrivate { get; set; }
+	public bool IsGameDetailsPrivate { get; set; }
 	public bool HasPrime { get; set; }
 	public bool IsTradeBanned { get; set; }
 	public bool IsVACBanned { get; set; }
@@ -145,6 +146,7 @@ public class SteamService
 		if (player != null)
 		{
 			userInfo.IsPrivate = player["communityvisibilitystate"]?.ToObject<int?>() != 3;
+			userInfo.IsGameDetailsPrivate = player["gameextrainfo"] == null;
 			int? timeCreated = player["timecreated"]?.ToObject<int?>();
 			userInfo.SteamAccountAge = timeCreated.HasValue
 				? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timeCreated.Value)
