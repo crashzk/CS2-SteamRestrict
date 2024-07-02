@@ -6,8 +6,7 @@ using CounterStrikeSharp.API.Modules.Admin;
 
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using Steamworks;
-using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Utils;
 
 namespace KitsuneSteamRestrict;
 
@@ -19,23 +18,17 @@ public class PluginConfig : BasePluginConfig
     [JsonPropertyName("SteamWebAPI")]
     public string SteamWebAPI { get; set; } = "";
 
-    [JsonPropertyName("MinimumCS2LevelPrime")]
-    public int MinimumCS2LevelPrime { get; set; } = -1;
+    [JsonPropertyName("MinimumCS2Level")]
+    public int MinimumCS2Level { get; set; } = -1;
 
-    [JsonPropertyName("MinimumCS2LevelNonPrime")]
-    public int MinimumCS2LevelNonPrime { get; set; } = -1;
 
-    [JsonPropertyName("MinimumHourPrime")]
-    public int MinimumHourPrime { get; set; } = -1;
+    [JsonPropertyName("MinimumHour")]
+    public int MinimumHour { get; set; } = -1;
 
-    [JsonPropertyName("MinimumHourNonPrime")]
-    public int MinimumHourNonPrime { get; set; } = -1;
 
-    [JsonPropertyName("MinimumLevelPrime")]
-    public int MinimumLevelPrime { get; set; } = -1;
+    [JsonPropertyName("MinimumLevel")]
+    public int MinimumLevel { get; set; } = -1;
 
-    [JsonPropertyName("MinimumLevelNonPrime")]
-    public int MinimumLevelNonPrime { get; set; } = -1;
 
     [JsonPropertyName("MinimumSteamAccountAgeInDays")]
     public int MinimumSteamAccountAgeInDays { get; set; } = -1;
@@ -55,11 +48,14 @@ public class PluginConfig : BasePluginConfig
     [JsonPropertyName("BlockGameBanned")]
     public bool BlockGameBanned { get; set; } = false;
 
+    [JsonPropertyName("PrivateProfileWarningTime")]
+    public int PrivateProfileWarningTime { get; set; } = 5;
+
     [JsonPropertyName("DatabaseSettings")]
     public DatabaseSettings DatabaseSettings { get; set; } = new DatabaseSettings();
 
     [JsonPropertyName("ConfigVersion")]
-    public override int Version { get; set; } = 3;
+    public override int Version { get; set; } = 4;
 }
 
 public sealed class DatabaseSettings
@@ -93,14 +89,15 @@ public sealed class DatabaseSettings
 public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 {
     public override string ModuleName => "Steam Restrict";
-    public override string ModuleVersion => "1.3.2";
+    public override string ModuleVersion => "1.4.0";
     public override string ModuleAuthor => "K4ryuu, Cruze @ KitsuneLab";
     public override string ModuleDescription => "Restrict certain players from connecting to your server.";
 
     public readonly HttpClient Client = new HttpClient();
     private bool g_bSteamAPIActivated = false;
 
-    private CounterStrikeSharp.API.Modules.Timers.Timer?[] g_hAuthorize = new CounterStrikeSharp.API.Modules.Timers.Timer?[65];
+    private CounterStrikeSharp.API.Modules.Timers.Timer?[] g_hTimer = new CounterStrikeSharp.API.Modules.Timers.Timer?[65];
+    private int[] g_iWarnTime = new int[65];
 
     private BypassConfig? _bypassConfig;
     public PluginConfig Config { get; set; } = new();
@@ -129,8 +126,8 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
         }
 
         RegisterListener<Listeners.OnGameServerSteamAPIActivated>(() => { g_bSteamAPIActivated = true; });
-        RegisterListener<Listeners.OnClientConnect>((int slot, string name, string ipAddress) => { g_hAuthorize[slot]?.Kill(); });
-        RegisterListener<Listeners.OnClientDisconnect>((int slot) => { g_hAuthorize[slot]?.Kill(); });
+        RegisterListener<Listeners.OnClientConnect>((int slot, string name, string ipAddress) => { g_hTimer[slot]?.Kill(); });
+        RegisterListener<Listeners.OnClientDisconnect>((int slot) => { g_hTimer[slot]?.Kill(); });
         RegisterEventHandler<EventPlayerConnectFull>(OnPlayerConnectFull, HookMode.Post);
 
         if (hotReload)
@@ -164,11 +161,11 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
         if (player.AuthorizedSteamID == null)
         {
-            g_hAuthorize[player.Slot] = AddTimer(1.0f, () =>
+            g_hTimer[player.Slot] = AddTimer(1.0f, () =>
             {
                 if (player.AuthorizedSteamID != null)
                 {
-                    g_hAuthorize[player.Slot]?.Kill();
+                    g_hTimer[player.Slot]?.Kill();
                     OnPlayerConnectFull(player);
                     return;
                 }
@@ -203,12 +200,8 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
     private void CheckUserViolations(nint handle, ulong authorizedSteamID)
     {
-        CSteamID cSteamID = new CSteamID(authorizedSteamID);
-
         SteamUserInfo UserInfo = new SteamUserInfo
         {
-            HasPrime = SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)624820) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense
-                    || SteamGameServer.UserHasLicenseForApp(cSteamID, (AppId_t)54029) == EUserHasLicenseForAppResult.k_EUserHasLicenseResultHasLicense,
             CS2Level = new CCSPlayerController_InventoryServices(handle).PersonaDataPublicLevel
         };
 
@@ -236,7 +229,7 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                             Logger.LogInformation($"Steam Account Creation Date: {userInfo.SteamAccountAge:dd-MM-yyyy} ({(int)(DateTime.Now - userInfo.SteamAccountAge).TotalDays} days ago)");
                         else
                             Logger.LogInformation($"Steam Account Creation Date: N/A");
-                        Logger.LogInformation($"HasPrime: {userInfo.HasPrime}");
+                        //Logger.LogInformation($"HasPrime: {userInfo.HasPrime}"); Removed due to people bought prime after CS2 cannot be detected sadly (or atleast not yet)
                         Logger.LogInformation($"HasPrivateProfile: {userInfo.IsPrivate}");
                         Logger.LogInformation($"IsTradeBanned: {userInfo.IsTradeBanned}");
                         Logger.LogInformation($"IsGameBanned: {userInfo.IsGameBanned}");
@@ -245,7 +238,32 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
                     if (IsRestrictionViolated(player, userInfo))
                     {
-                        Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
+                        if (Config.PrivateProfileWarningTime > 0 && userInfo.IsPrivate)
+                        {
+                            g_iWarnTime[player.Slot] = Config.PrivateProfileWarningTime;
+                            int playerSlot = player.Slot;
+
+                            g_hTimer[playerSlot] = AddTimer(1, () =>
+                            {
+                                if (player?.IsValid == true)
+                                {
+                                    player.PrintToChat($" {ChatColors.Silver}[ {ChatColors.Lime}SteamRestrict {ChatColors.Silver}] {ChatColors.LightRed}Your Steam profile or Game details are private. You will be kicked in {g_iWarnTime[playerSlot]} seconds.");
+                                }
+
+                                g_iWarnTime[playerSlot]--;
+
+                                if (g_iWarnTime[playerSlot] <= 0)
+                                {
+                                    if (player?.IsValid == true)
+                                        Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
+
+                                    g_hTimer[playerSlot]?.Kill();
+                                    g_hTimer[playerSlot] = null;
+                                }
+                            }, TimerFlags.REPEAT);
+                        }
+                        else
+                            Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
                     }
                     else if (!IsDatabaseConfigDefault())
                     {
@@ -269,30 +287,15 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
 
         BypassConfig bypassConfig = _bypassConfig ?? new BypassConfig();
         PlayerBypassConfig? playerBypassConfig = bypassConfig.GetPlayerConfig(player.AuthorizedSteamID?.SteamId64 ?? 0);
-        bool isPrime = userInfo.HasPrime;
 
-        if (isPrime)
-        {
-            if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2LevelPrime != -1 && userInfo.CS2Level < Config.MinimumCS2LevelPrime)
-                return true;
+        if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2Level != -1 && userInfo.CS2Level < Config.MinimumCS2Level)
+            return true;
 
-            if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHourPrime != -1 && userInfo.CS2Playtime < Config.MinimumHourPrime)
-                return true;
+        if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHour != -1 && userInfo.CS2Playtime < Config.MinimumHour)
+            return true;
 
-            if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevelPrime != -1 && userInfo.SteamLevel < Config.MinimumLevelPrime)
-                return true;
-        }
-        else
-        {
-            if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2LevelNonPrime != -1 && userInfo.CS2Level < Config.MinimumCS2LevelNonPrime)
-                return true;
-
-            if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHourNonPrime != -1 && userInfo.CS2Playtime < Config.MinimumHourNonPrime)
-                return true;
-
-            if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevelNonPrime != -1 && userInfo.SteamLevel < Config.MinimumLevelNonPrime)
-                return true;
-        }
+        if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevel != -1 && userInfo.SteamLevel < Config.MinimumLevel)
+            return true;
 
         if (!(playerBypassConfig?.BypassMinimumSteamAccountAge ?? false) && Config.MinimumSteamAccountAgeInDays != -1 && (DateTime.Now - userInfo.SteamAccountAge).TotalDays < Config.MinimumSteamAccountAgeInDays)
             return true;

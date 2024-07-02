@@ -1,10 +1,7 @@
 
-using CounterStrikeSharp.API;
-using CounterStrikeSharp.API.Core;
 using KitsuneSteamRestrict;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
-using Steamworks;
 
 public class SteamUserInfo
 {
@@ -39,6 +36,7 @@ public class SteamService
 
 	public async Task FetchSteamUserInfo(string steamId)
 	{
+		//UserInfo.HasPrime = await FetchHasPrimeAsync(steamId);
 		UserInfo!.CS2Playtime = await FetchCS2PlaytimeAsync(steamId) / 60;
 		UserInfo.SteamLevel = await FetchSteamLevelAsync(steamId);
 		await FetchProfilePrivacyAsync(steamId, UserInfo);
@@ -174,4 +172,26 @@ public class SteamService
 		JToken? userGameBan = data["players"]?.FirstOrDefault();
 		userInfo.IsVACBanned = userGameBan != null && (bool)(userGameBan["VACBanned"] ?? false);
 	}
+
+	/*
+	! This method is not used in the current implementation due to the people who bought Prime after
+	! the CS2 release are not visible as Prime users. This method is kept here for reference if its gonna
+	! be used in the future, whenever Volvo decides to fix their API.
+
+	private async Task<bool> FetchHasPrimeAsync(string steamId)
+	{
+		var url = $"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={_steamWebAPIKey}&steamid={steamId}&include_appinfo=false&include_played_free_games=true&format=json";
+		var json = await GetApiResponseAsync(url);
+		if (json != null)
+		{
+			JObject data = JObject.Parse(json);
+			var games = data["response"]?["games"];
+			if (games != null)
+			{
+				_logger.LogInformation($"Prime: {games.Any(game => game["appid"]?.Value<int>() == 624820 || game["appid"]?.Value<int>() == 54029)}");
+				return games.Any(game => game["appid"]?.Value<int>() == 624820 || game["appid"]?.Value<int>() == 54029);
+			}
+		}
+		return false;
+	}*/
 }

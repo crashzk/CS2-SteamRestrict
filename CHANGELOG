@@ -1,3 +1,9 @@
+-- 2024. 07. 02 - v1.4.0
+
+- feat: Added option to allow private profiles join for given seconds to warn them about the issue
+- remove: Removed fully SteamWorks dependency and solved with own solutions instead
+- remove: Removed prime based checks for now due to SteamWorks not detect primes if bought after CS2 release
+
 -- 2024. 05. 21 - v1.3.2
 
 - feat: Added option to disable join logs
