@@ -2,6 +2,7 @@
 
 - feat: Added option to change the warning print interval
 - feat: Added log and check for game details privated
+- fix: Warning countdown issues
 
 -- 2024. 07. 02 - v1.4.0
 
