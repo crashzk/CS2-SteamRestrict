@@ -10,27 +10,30 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <h1 align="center">KitsuneLab©</h1>
-  <h3 align="center">Steam Restrict</h3>
-  <p align="center">Enhance your game server's control with this plugin. Fetch and analyze player data from their Steam profiles, enforce minimum CS2 playtime and Steam level requirements, and customize restrictions for Prime and non-Prime players. Flexible and powerful server management tool.</p>
-
+  <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict">
+    <img src="https://i.imgur.com/sej1ZzD.png" alt="Logo" width="400" height="256">
+  </a>
+  <h3 align="center">CounterStrike2 | Steam Restrict</h3>
   <p align="center">
+    Enhance your game server's control with this plugin. Restrict who can join on your server by their playtime, cs2/steam level, vac/game bans, steam account age and more. First level to block cheaters with new accounts.
     <br />
     <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict/releases">Download</a>
     ·
-    <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict/issues/new?assignees=KitsuneLab-Development&labels=bug&projects=&template=bug_report.md&title=%5BBUG%5D">Report Bug</a>
+    <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict/issues/new?assignees=KitsuneLab-Development&labels=bug&template=bug_report.md&title=%5BBUG%5D">Report Bug</a>
     ·
-    <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict/issues/new?assignees=KitsuneLab-Development&labels=enhancement&projects=&template=feature_request.md&title=%5BREQ%5D">Request Feature</a>
+    <a href="https://github.com/KitsuneLab-Development/CS2-SteamRestrict/issues/new?assignees=KitsuneLab-Development&labels=enhancement&template=feature_request.md&title=%5BREQ%5D">Request Feature</a>
+     ·
+    <a href="https://kitsune-lab.com">Website</a>
+     ·
+    <a href="https://nests.kitsune-lab.com/tickets/create?department_id=2">Hire Us</a>
   </p>
 </div>
-
-<!-- ABOUT THE PROJECT -->
 
 ### Dependencies
 
 To use this server addon, you'll need the following dependencies installed:
 
-- [**CounterStrikeSharp**](https://github.com/roflmuffin/CounterStrikeSharp/releases): CounterStrikeSharp allows you to write server plugins in C# for Counter-Strike 2/Source2/CS2
+- [**CounterStrikeSharp**](https://github.com/roflmuffin/CounterStrikeSharp/releases): CounterStrikeSharp allows you to write server plugins in C# for Counter-Strike 2/Source2/CS2.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -42,6 +45,17 @@ To use this server addon, you'll need the following dependencies installed:
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+<!-- AUTHORS -->
+
+## Authors
+
+- [**K4ryuu**](https://github.com/K4ryuu)
+- [**Cruze**](https://github.com/Cruze03)
+
+See also the list of [contributors](https://github.com/KitsuneLab-Development/CS2-SteamRestrict/graphs/contributors) who participated in this project as an outside contributor.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 <!-- LICENSE -->
 
 ## License
@@ -49,3 +63,12 @@ To use this server addon, you'll need the following dependencies installed:
 Distributed under the GPL-3.0 License. See `LICENSE.md` for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- CONTACT -->
+
+## Contact
+
+- **KitsuneLab Team** - [contact@kitsune-lab.com](mailto:contact@kitsune-lab.com)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
