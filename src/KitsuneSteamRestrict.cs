@@ -331,8 +331,8 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
             });
         });
     }
-
-    private bool IsRestrictionViolatedVIP(CCSPlayerController player, SteamUserInfo userInfo)
+	
+	private bool IsRestrictionViolated(CCSPlayerController player, SteamUserInfo userInfo)
     {
         if (AdminManager.PlayerHasPermissions(player, "@css/vip"))
             return false;
@@ -353,44 +353,6 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
             return true;
 
         if (Config.BlockPrivateProfile && !(playerBypassConfig?.BypassPrivateProfile ?? false) && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
-            return true;
-
-        return false;
-    }
-	
-	private bool IsRestrictionViolated(CCSPlayerController player, SteamUserInfo userInfo)
-    {
-        if (AdminManager.PlayerHasPermissions(player, "@css/bypasspremiumcheck"))
-            return false;
-
-        BypassConfig bypassConfig = _bypassConfig ?? new BypassConfig();
-        PlayerBypassConfig? playerBypassConfig = bypassConfig.GetPlayerConfig(player.AuthorizedSteamID?.SteamId64 ?? 0);
-
-        if (!(playerBypassConfig?.BypassMinimumCS2Level ?? false) && Config.MinimumCS2Level != -1 && userInfo.CS2Level < Config.MinimumCS2Level)
-            return true;
-
-        if (!(playerBypassConfig?.BypassMinimumHours ?? false) && Config.MinimumHour != -1 && userInfo.CS2Playtime < Config.MinimumHour)
-            return true;
-
-        if (!(playerBypassConfig?.BypassMinimumLevel ?? false) && Config.MinimumLevel != -1 && userInfo.SteamLevel < Config.MinimumLevel)
-            return true;
-
-        if (!(playerBypassConfig?.BypassMinimumSteamAccountAge ?? false) && Config.MinimumSteamAccountAgeInDays != -1 && (DateTime.Now - userInfo.SteamAccountAge).TotalDays < Config.MinimumSteamAccountAgeInDays)
-            return true;
-
-        if (Config.BlockPrivateProfile && !(playerBypassConfig?.BypassPrivateProfile ?? false) && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
-            return true;
-
-        if (Config.BlockTradeBanned && !(playerBypassConfig?.BypassTradeBanned ?? false) && userInfo.IsTradeBanned)
-            return true;
-
-        if (Config.BlockGameBanned && !(playerBypassConfig?.BypassGameBanned ?? false) && userInfo.IsGameBanned)
-            return true;
-
-        if (!string.IsNullOrEmpty(Config.SteamGroupID) && !(playerBypassConfig?.BypassSteamGroupCheck ?? false) && !userInfo.IsInSteamGroup)
-            return true;
-
-        if (Config.BlockVACBanned && !(playerBypassConfig?.BypassVACBanned ?? false) && userInfo.IsVACBanned)
             return true;
 
         return false;
