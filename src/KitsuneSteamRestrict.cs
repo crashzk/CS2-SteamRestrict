@@ -237,46 +237,6 @@ public class SteamRestrictPlugin : BasePlugin, IPluginConfig<PluginConfig>
                         Logger.LogInformation($"IsInSteamGroup: {userInfo.IsInSteamGroup}");
                     }
 
-                    if (IsRestrictionViolatedVIP (player, userInfo))
-                    {
-                        if (Config.PrivateProfileWarningTime > 0 && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
-                        {
-                            int playerSlot = player.Slot;
-                            g_iWarnTime[playerSlot] = Config.PrivateProfileWarningTime;
-                            int printInterval = Config.PrivateProfileWarningPrintSeconds;
-                            int remainingPrintTime = printInterval;
-
-                            g_hTimer[playerSlot] = AddTimer(1.0f, () =>
-                            {
-                                if (player?.IsValid == true)
-                                {
-                                    g_iWarnTime[playerSlot]--;
-                                    remainingPrintTime--;
-
-                                    if (remainingPrintTime <= 0)
-                                    {
-                                        player.PrintToChat($" {ChatColors.Silver}[ {ChatColors.Lime}SteamRestrict {ChatColors.Silver}] {ChatColors.LightRed}Your Steam profile or Game details are private. You will be kicked in {g_iWarnTime[playerSlot]} seconds.");
-                                        remainingPrintTime = printInterval;
-                                    }
-
-                                    if (g_iWarnTime[playerSlot] <= 0)
-                                    {
-                                        Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
-                                        g_hTimer[playerSlot]?.Kill();
-                                        g_hTimer[playerSlot] = null;
-                                    }
-                                }
-                                else
-                                {
-                                    g_hTimer[playerSlot]?.Kill();
-                                    g_hTimer[playerSlot] = null;
-                                }
-                            }, TimerFlags.REPEAT);
-                        }
-                        else
-                            Server.ExecuteCommand($"kickid {player.UserId} \"You have been kicked for not meeting the minimum requirements.\"");
-                    }
-					
                     if (IsRestrictionViolated (player, userInfo))
                     {
                         if (Config.PrivateProfileWarningTime > 0 && (userInfo.IsPrivate || userInfo.IsGameDetailsPrivate))
